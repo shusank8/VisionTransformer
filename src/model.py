@@ -57,15 +57,19 @@ class SelfAttention(nn.Module):
 
     @staticmethod
     def attention(q,k,v):
+        # SHAPE OF Q,K,V = > (B, NUM_HEADS, SEQ, HEAD_DIM)
         head_dim = q.shape[-1]
         attention = q @ k.transpose(-2,-1) / (head_dim)**(1/2)
+        # SHAPE OF ATTENTION=> (B, NUM_HEADS, SEQ, SEQ)
         attention = attention.softmax(dim=-1)
+        # SHAPE OF OUT => (B, NUM_HEADS, SEQ, HEAD_DIM)
         out = attention @ v
         return out, attention
 
     
     def forward(self, x):
         # shape of x => (B, SEQ, EM )
+        B,T,C = q.shape
         q = self.query(x)
         k = self.query(x)
         v = self.query(x)
@@ -74,6 +78,57 @@ class SelfAttention(nn.Module):
         q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).transpose(1,2)
         k = q.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(1,2)
         v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(1,2)
+
+        out, attention = SelfAttention.attention(q,k,v)
+
+        # shape of out=> (B, NUM_HEADS, SEQ, HEAD_DIM)
+        out = out.transpose(1,2).contiguous().view(B,T,C)
+        return self.proj(out)
+
+
+class FeedForward(nn.Module):
+    def __init__(self, embdim):
+        super().__init__()
+        self.ffd = nn.Sequential(
+            nn.Linear(embdim, 4*embdim),
+            # use SWiGlU
+            nn.ReLU(),
+            nn.Linear(4*embdim, embdim)
+        )
+
+    
+    def forward(self, x):
+        return self.ffd(x)
+    
+
+
+class EncoderBlock(nn.Module):
+
+    def __init__(self, embdim, num_heads):
+        super().__init__()
+        self.attn = SelfAttention(embdim, num_heads)
+        self.ffd = FeedForward(embdim)
+        self.layernorm1 = nn.LayerNormalization(embdim)
+        self.layernorm2 = nn.LayerNormalization(embdim)
+    
+    def forward(self, x):
+        # skip connections
+        x = x + self.attn(self.layernorm1(x))
+        x = x + self.ffd(self.layernorm2(x))
+        return x
+
+class Encoder(nn.Module):
+
+    def __init__(self, layers):
+        super().__init__()
+        self.layers = layers
+
+    
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
 
 
 
