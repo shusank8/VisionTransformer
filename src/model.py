@@ -131,5 +131,56 @@ class Encoder(nn.Module):
 
 
 
+class VisionTransformer(nn.Module):
+    def __init__(self, patch, cls_tok, encoder):
+        super().__init__()
+        # self.patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
+        # # adding cls token: not doing average
+        # self.cls_token = torch.zeros(1,1, emb_dim)
+        # # about to add cls token to seqlen
+        # self.seq_len = patch_size+1
+
+        # self.encoder = encoder
+        self.patch = patch
+        self.cls_tok = cls_tok
+        self.encoder = encoder
+
+    
+    def add_cls(self,x):
+        # shape of x=> (B, SEQ, EMBDIM)
+        B, SEQ, C = x.shape
+        self.cls_tok = self.cls_tok.expand(B, -1, C)
+        return torch.cat([
+            self.cls_tok, x
+        ], dim=1)
+
+
+    def forward(self, x):
+        # x shape => (B, C, H, W)
+        x = self.patch(x)
+        # x shape => (B, H*W, EMBDIM)
+        x = self.add_cls(x)
+        # shape of x => (B, SEQ+1, Embdim) added 1 cause of cls token
+        return self.encoder(x)
+
+
+def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth, num_heads):
+    patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
+    cls_token = torch.zeros(1,1,emb_dim)
+    encoder_blocks = []
+
+    for _ in range(encoder_depth):
+        encoder_block = EncoderBlock(emb_dim, num_heads)
+        encoder_blocks.append(encoder_block)
+    
+    encoder = Encoder(nn.ModuleList(encoder_blocks))
+    vision_transformer = VisionTransformer(patch, cls_token, encoder)
+    return vision_transformer
+
+
+
+
+
+
 
 
