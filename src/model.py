@@ -166,7 +166,7 @@ class VisionTransformer(nn.Module):
 
 def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth, num_heads):
     patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
-    cls_token = torch.zeros(1,1,emb_dim)
+    cls_token = nn.Parameter(torch.zeros(1,1,emb_dim))
     encoder_blocks = []
 
     for _ in range(encoder_depth):
