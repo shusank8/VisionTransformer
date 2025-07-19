@@ -1,4 +1,8 @@
 Building Vision Transformer
 
-- [ ] This is an **unchecked** box
-- [x] This is a **checked** box
+- [x] Understand Vision Transformer
+- [x] Build Model; Vision Transformer
+- [ ] Add dropouts, initialize weights
+- [ ] Training and Validation data
+- [ ] Training loop and Validation loop
+- [ ] Repeat and Rinse !!
