@@ -178,7 +178,7 @@ def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth,
     return vision_transformer
 
 
-
+# TODO: ADD DROPOUT, initialize weights, dataloader, training and infe loop
 
 
 
