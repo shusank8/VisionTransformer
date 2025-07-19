@@ -56,7 +56,7 @@ class SelfAttention(nn.Module):
 
 
     @staticmethod
-    def attention(self, q,k,v):
+    def attention(q,k,v):
         head_dim = q.shape[-1]
         attention = q @ k.transpose(-2,-1) / (head_dim)**(1/2)
         attention = attention.softmax(dim=-1)
