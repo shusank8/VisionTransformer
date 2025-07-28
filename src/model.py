@@ -6,6 +6,7 @@ import torch.nn as nn
 class PatchEmbedding(nn.Module):
 
     def __init__(self, img_size, patch_size, in_channels=3, emb_dim=768):
+        # (B, NC, H, W)
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
@@ -23,6 +24,9 @@ class PatchEmbedding(nn.Module):
         out = self.proj(x)
         B,C,H,W = x.shape
         out = out.view(B, C, H*W).transpose(1,2)
+        # (B, H*W, C)
+        # C = EMBDIM
+        # (B, SEQ, EMBDIM)
         return out
 
 
@@ -75,6 +79,7 @@ class SelfAttention(nn.Module):
         v = self.query(x)
         # shape of q,k,v => (B, SEQ, EM )
         # converting q,k,v => (B, NUM_HEAD, SEQ, HEAD_DIM)
+
         q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).transpose(1,2)
         k = q.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(1,2)
         v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(1,2)
@@ -82,6 +87,7 @@ class SelfAttention(nn.Module):
         out, attention = SelfAttention.attention(q,k,v)
 
         # shape of out=> (B, NUM_HEADS, SEQ, HEAD_DIM)
+
         out = out.transpose(1,2).contiguous().view(B,T,C)
         return self.proj(out)
 
@@ -148,6 +154,10 @@ class VisionTransformer(nn.Module):
     
     def add_cls(self,x):
         # shape of x=> (B, SEQ, EMBDIM)
+        # (B, SEQ, EMBDIM)
+        # (B, SEQ+1, EMBDIM)
+        # (B, 1, EMBDIM)
+        # (B, 1, EMDIM) => (B, EMBDIM) => (B, 2)
         B, SEQ, C = x.shape
         self.cls_tok = self.cls_tok.expand(B, -1, C)
         return torch.cat([
@@ -161,8 +171,11 @@ class VisionTransformer(nn.Module):
         # x shape => (B, H*W, EMBDIM)
         x = self.add_cls(x)
         # shape of x => (B, SEQ+1, Embdim) added 1 cause of cls token
-        return self.encoder(x)
+        x = self.encoder(x)
 
+        # only return cls token from every batch, if classification we can add final layer over here
+        # that will project x[:, 0] to probabilities of classes
+        return x[:, 0]
 
 def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth, num_heads):
     patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
@@ -176,9 +189,6 @@ def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth,
     encoder = Encoder(nn.ModuleList(encoder_blocks))
     vision_transformer = VisionTransformer(patch, cls_token, encoder)
     return vision_transformer
-
-
-# TODO: ADD DROPOUT, initialize weights, dataloader, training and infe loop
 
 
 
