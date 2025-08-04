@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 
-
 class PatchEmbedding(nn.Module):
 
     def __init__(self, img_size, patch_size, in_channels=3, emb_dim=768):
@@ -13,22 +12,21 @@ class PatchEmbedding(nn.Module):
         self.in_channels = in_channels
         self.emb_dim = emb_dim
         self.proj = nn.Conv2d(
-            in_channels = in_channels,
-            out_channels = self.emb_dim,
-            kernel_size = self.patch_size,
-            stride = patch_size,
-            bias = True
+            in_channels=in_channels,
+            out_channels=self.emb_dim,
+            kernel_size=self.patch_size,
+            stride=patch_size,
+            bias=True,
         )
-    
+
     def forward(self, x):
         out = self.proj(x)
-        B,C,H,W = x.shape
-        out = out.view(B, C, H*W).transpose(1,2)
+        B, C, H, W = out.shape
+        out = out.view(B, C, H * W).transpose(1, 2)
         # (B, H*W, C)
         # C = EMBDIM
         # (B, SEQ, EMBDIM)
         return out
-
 
 
 class LayerNormalization(nn.Module):
@@ -41,8 +39,7 @@ class LayerNormalization(nn.Module):
     def forward(self, x):
         xmean = x.mean(dim=-1, keepdim=True)
         xstd = x.std(dim=-1, keepdim=True)
-        return self.alpha * ((x-xmean)/(xstd+1e-8)) + self.beta
-    
+        return self.alpha * ((x - xmean) / (xstd + 1e-8)) + self.beta
 
 
 class SelfAttention(nn.Module):
@@ -52,43 +49,49 @@ class SelfAttention(nn.Module):
         self.emb_dim = embdim
         self.num_heads = num_heads
         self.query = nn.Linear(embdim, embdim)
-        self.key  = nn.Linear(embdim, embdim)
+        self.key = nn.Linear(embdim, embdim)
         self.value = nn.Linear(embdim, embdim)
-        self.proj  = nn.Linear(embdim, embdim)
-        assert self.emb_dim%self.num_heads==0, f"Embdim: {embdim} must be divisible by num_heads: {num_heads} "
-        self.head_dim = self.emb_dim//num_heads
-
+        self.proj = nn.Linear(embdim, embdim)
+        assert (
+            self.emb_dim % self.num_heads == 0
+        ), f"Embdim: {embdim} must be divisible by num_heads: {num_heads} "
+        self.head_dim = self.emb_dim // num_heads
 
     @staticmethod
-    def attention(q,k,v):
+    def attention(q, k, v):
         # SHAPE OF Q,K,V = > (B, NUM_HEADS, SEQ, HEAD_DIM)
         head_dim = q.shape[-1]
-        attention = q @ k.transpose(-2,-1) / (head_dim)**(1/2)
+        attention = q @ k.transpose(-2, -1) / (head_dim) ** (1 / 2)
         # SHAPE OF ATTENTION=> (B, NUM_HEADS, SEQ, SEQ)
         attention = attention.softmax(dim=-1)
         # SHAPE OF OUT => (B, NUM_HEADS, SEQ, HEAD_DIM)
         out = attention @ v
         return out, attention
 
-    
     def forward(self, x):
         # shape of x => (B, SEQ, EM )
-        B,T,C = q.shape
+        B, T, C = x.shape
         q = self.query(x)
         k = self.query(x)
         v = self.query(x)
         # shape of q,k,v => (B, SEQ, EM )
         # converting q,k,v => (B, NUM_HEAD, SEQ, HEAD_DIM)
 
-        q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).transpose(1,2)
-        k = q.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(1,2)
-        v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(1,2)
+        q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        k = k.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
 
-        out, attention = SelfAttention.attention(q,k,v)
+        out, attention = SelfAttention.attention(q, k, v)
 
         # shape of out=> (B, NUM_HEADS, SEQ, HEAD_DIM)
 
-        out = out.transpose(1,2).contiguous().view(B,T,C)
+        out = out.transpose(1, 2).contiguous().view(B, T, C)
         return self.proj(out)
 
 
@@ -96,16 +99,14 @@ class FeedForward(nn.Module):
     def __init__(self, embdim):
         super().__init__()
         self.ffd = nn.Sequential(
-            nn.Linear(embdim, 4*embdim),
+            nn.Linear(embdim, 4 * embdim),
             # use SWiGlU
             nn.ReLU(),
-            nn.Linear(4*embdim, embdim)
+            nn.Linear(4 * embdim, embdim),
         )
 
-    
     def forward(self, x):
         return self.ffd(x)
-    
 
 
 class EncoderBlock(nn.Module):
@@ -114,14 +115,15 @@ class EncoderBlock(nn.Module):
         super().__init__()
         self.attn = SelfAttention(embdim, num_heads)
         self.ffd = FeedForward(embdim)
-        self.layernorm1 = nn.LayerNormalization(embdim)
-        self.layernorm2 = nn.LayerNormalization(embdim)
-    
+        self.layernorm1 = LayerNormalization(embdim)
+        self.layernorm2 = LayerNormalization(embdim)
+
     def forward(self, x):
         # skip connections
         x = x + self.attn(self.layernorm1(x))
         x = x + self.ffd(self.layernorm2(x))
         return x
+
 
 class Encoder(nn.Module):
 
@@ -129,16 +131,23 @@ class Encoder(nn.Module):
         super().__init__()
         self.layers = layers
 
-    
     def forward(self, x):
         for layer in self.layers:
             x = layer(x)
         return x
 
 
+class FinalLinear(nn.Module):
+    def __init__(self, embdim, target):
+        super().__init__()
+        self.linear = nn.Linear(embdim, target)
+
+    def forward(self, x):
+        return self.linear(x)
+
 
 class VisionTransformer(nn.Module):
-    def __init__(self, patch, cls_tok, encoder):
+    def __init__(self, patch, cls_tok, encoder, final_linear):
         super().__init__()
         # self.patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
         # # adding cls token: not doing average
@@ -150,20 +159,17 @@ class VisionTransformer(nn.Module):
         self.patch = patch
         self.cls_tok = cls_tok
         self.encoder = encoder
+        self.final_linear = final_linear
 
-    
-    def add_cls(self,x):
+    def add_cls(self, x):
         # shape of x=> (B, SEQ, EMBDIM)
         # (B, SEQ, EMBDIM)
         # (B, SEQ+1, EMBDIM)
         # (B, 1, EMBDIM)
         # (B, 1, EMDIM) => (B, EMBDIM) => (B, 2)
         B, SEQ, C = x.shape
-        self.cls_tok = self.cls_tok.expand(B, -1, C)
-        return torch.cat([
-            self.cls_tok, x
-        ], dim=1)
-
+        cls_tok = self.cls_tok.expand(B, -1, C)
+        return torch.cat([cls_tok, x], dim=1)
 
     def forward(self, x):
         # x shape => (B, C, H, W)
@@ -175,22 +181,21 @@ class VisionTransformer(nn.Module):
 
         # only return cls token from every batch, if classification we can add final layer over here
         # that will project x[:, 0] to probabilities of classes
-        return x[:, 0]
+        return self.final_linear(x[:, 0])
 
-def build_transformer(img_size, patch_size, in_channels, emb_dim, encoder_depth, num_heads):
+
+def build_transformer(
+    img_size, patch_size, in_channels, emb_dim, encoder_depth, num_heads, target
+):
     patch = PatchEmbedding(img_size, patch_size, in_channels, emb_dim)
-    cls_token = nn.Parameter(torch.zeros(1,1,emb_dim))
+    cls_token = nn.Parameter(torch.zeros(1, 1, emb_dim))
     encoder_blocks = []
 
     for _ in range(encoder_depth):
         encoder_block = EncoderBlock(emb_dim, num_heads)
         encoder_blocks.append(encoder_block)
-    
+
     encoder = Encoder(nn.ModuleList(encoder_blocks))
-    vision_transformer = VisionTransformer(patch, cls_token, encoder)
+    final_linear = FinalLinear(emb_dim, target)
+    vision_transformer = VisionTransformer(patch, cls_token, encoder, final_linear)
     return vision_transformer
-
-
-
-
-
